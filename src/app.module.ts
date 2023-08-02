@@ -3,9 +3,21 @@ import { ConfigModule } from '@nestjs/config';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { User } from './users/models/user.model';
 import { UsersModule } from './users/users.module';
+import { MailModule } from './mail/mail.module';
+import { BotModule } from './bot/bot.module';
+import { TelegrafModule } from 'nestjs-telegraf';
+import { BOT_NAME } from './app.constants';
 
 @Module({
   imports: [
+    TelegrafModule.forRootAsync({
+      botName: BOT_NAME,
+      useFactory: () => ({
+        token: process.env.BOT_TOKEN,
+        middlewares: [],
+        include: [BotModule],
+      }),
+    }),
     ConfigModule.forRoot({ envFilePath: `.env`, isGlobal: true }),
     SequelizeModule.forRoot({
       dialect: 'postgres',
@@ -19,6 +31,8 @@ import { UsersModule } from './users/users.module';
       logging: false,
     }),
     UsersModule,
+    MailModule,
+    BotModule,
   ],
   controllers: [],
   providers: [],
