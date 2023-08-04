@@ -7,6 +7,7 @@ import { MailModule } from './mail/mail.module';
 import { BotModule } from './bot/bot.module';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { BOT_NAME } from './app.constants';
+import { Bot } from './bot/model/bot.model';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { BOT_NAME } from './app.constants';
       username: process.env.POSTGRES_USER,
       password: String(process.env.POSTGRES_PASSWORD),
       database: process.env.POSTGRES_DB,
-      models: [User],
+      models: [User, Bot],
       autoLoadModels: true,
       logging: false,
     }),

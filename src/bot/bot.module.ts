@@ -5,6 +5,8 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { Bot } from './model/bot.model';
 
 @Module({
+  imports: [SequelizeModule.forFeature([Bot])],
   providers: [BotService, BotUpdate],
+  exports: [BotService],
 })
 export class BotModule {}
