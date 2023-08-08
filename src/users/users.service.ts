@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,34 +13,42 @@ import { JwtService } from '@nestjs/jwt';
 import { Response } from 'express';
 import { InjectModel } from '@nestjs/sequelize';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, v4 } from 'uuid';
 import { LoginUserDto } from './dto/login-user.dto';
 import { Op } from 'sequelize';
 import { FindUserDto } from './dto/find-user.dto';
 import { MailService } from '../mail/mail.service';
-import { send } from 'process';
+import * as otpGenerator from 'otp-generator';
+import { BotService } from '../bot/bot.service';
+import { Otp } from '../otp/model/otp.model';
+import { PhoneUserDto } from './dto/phone-user.dto';
+import { AddMinutesToDate } from '../helpers/addMinutes';
+import { VerifyOtpDto } from './dto/verifyOtp.dto';
+import { dates, decode, encode } from '../helpers/crypto';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User) private readonly userRepo: typeof User,
+    @InjectModel(Otp) private readonly otpRepo: typeof Otp,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly botService: BotService,
   ) {}
-  async registration(CreateUserDto: CreateUserDto, res: Response) {
+  async registration(createUserDto: CreateUserDto, res: Response) {
     const user = await this.userRepo.findOne({
-      where: { username: CreateUserDto.username },
+      where: { username: createUserDto.username },
     });
     if (user) {
       throw new BadRequestException('Username already exists!');
     }
-    if (CreateUserDto.password !== CreateUserDto.confirm_password) {
+    if (createUserDto.password !== createUserDto.confirm_password) {
       throw new BadRequestException('Passwords is not match!');
     }
 
-    const hashed_password = await bcrypt.hash(CreateUserDto.password, 7);
+    const hashed_password = await bcrypt.hash(createUserDto.password, 7);
     const newUser = await this.userRepo.create({
-      ...CreateUserDto,
+      ...createUserDto,
       hashed_password: hashed_password,
     });
     const tokens = await this.getTokens(newUser);
@@ -76,14 +86,14 @@ export class UsersService {
     const { email, password } = loginUserDto;
     const user = await this.userRepo.findOne({ where: { email } });
     if (!user) {
-      throw new UnauthorizedException('User nor registered');
+      throw new UnauthorizedException('User not registered');
     }
     if (!user.is_active) {
-      throw new BadRequestException('user is not active')
+      throw new BadRequestException('User is not active');
     }
     const isMatchPass = await bcrypt.compare(password, user.hashed_password);
     if (!isMatchPass) {
-      throw new UnauthorizedException('User not registered(pass');
+      throw new UnauthorizedException('User not registered(pass)');
     }
     const tokens = await this.getTokens(user);
     const hashed_password_token = await bcrypt.hash(tokens.refresh_token, 7);
@@ -200,7 +210,7 @@ export class UsersService {
       { where: { activation_link: link, is_active: false }, returning: true },
     );
     if (!updatedUser[1][0]) {
-      throw new BadRequestException('User already avtivated');
+      throw new BadRequestException('User already activated');
     }
     const response = {
       message: 'User activated successfully',
@@ -208,7 +218,7 @@ export class UsersService {
     };
     return response;
   }
-  
+
   async findAll(findUserDto: FindUserDto) {
     const where = {};
     if (findUserDto.first_name) {
@@ -239,7 +249,6 @@ export class UsersService {
     return users;
   }
 
-
   findOne(id: number) {
     return `This action returns a #${id} user`;
   }
@@ -250,5 +259,93 @@ export class UsersService {
 
   remove(id: number) {
     return `This action removes a #${id} user`;
+  }
+
+  async newOTP(phoneUserDto: PhoneUserDto) {
+    const phone_number = phoneUserDto.phone;
+    const otp = otpGenerator.generate(4, {
+      upperCaseAlphabets: false,
+      lowerCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    const isSend = await this.botService.sendOTP(phone_number, otp);
+    if (!isSend) {
+      throw new HttpException(
+        "Avval Botdan ro'yxatdan o'ting",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const now = new Date();
+    const expiration_time = AddMinutesToDate(now, 5);
+    await this.otpRepo.destroy({
+      where: { chek: phone_number },
+    });
+    const newOtp = await this.otpRepo.create({
+      id: v4(),
+      otp,
+      expiration_time,
+      chek: phone_number,
+    });
+
+    const details = {
+      timestamp: now,
+      chek: phone_number,
+      success: true,
+      message: 'OTP sent to user',
+      otp_id: newOtp.id,
+    };
+    const encoded = await encode(JSON.stringify(details));
+    return { status: 'Success', Details: encoded };
+  }
+
+  async verifyOtp(verifyOtpDto: VerifyOtpDto) {
+    const { verification_key, otp, chek } = verifyOtpDto;
+    const currentdate = new Date();
+    const decoded = await decode(verification_key);
+    const obj = JSON.parse(decoded);
+    const chek_obj = obj.chek;
+    if (chek_obj != chek) {
+      throw new BadRequestException(' OTP bu raqamga yuborilmagan');
+    }
+    const result = await this.otpRepo.findOne({
+      where: { id: obj.otp_id },
+    });
+    if (result != null) {
+      if (!result.verified) {
+        if (dates.compare(result.expiration_time, currentdate)) {
+          if (otp === result.otp) {
+            const user = await this.userRepo.findOne({
+              where: { phone: chek },
+            });
+            if (user) {
+              const updatedUser = await this.userRepo.update(
+                { is_owner: true },
+                { where: { id: user.id }, returning: true },
+              );
+              await this.otpRepo.update(
+                { verified: true },
+                { where: { id: obj.otp_id }, returning: true },
+              );
+              const response = {
+                message: 'User updated as owner',
+                user: updatedUser[1][0],
+              };
+              return response;
+            } else {
+              throw new BadRequestException("BUnday foydalanuvchi yo'q");
+            }
+          } else {
+            throw new BadRequestException('OTP is not match');
+          }
+        } else {
+          throw new BadRequestException('OTP expired');
+        }
+      } else {
+        throw new BadRequestException('OTP already used');
+      }
+    } else {
+      throw new BadRequestException("Bunday foydalanuvchi yo'q");
+    }
   }
 }

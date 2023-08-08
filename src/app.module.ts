@@ -8,6 +8,10 @@ import { BotModule } from './bot/bot.module';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { BOT_NAME } from './app.constants';
 import { Bot } from './bot/model/bot.model';
+import { OtpModule } from './otp/otp.module';
+import { Otp } from './otp/model/otp.model';
+import { RegionModule } from './region/region.module';
+import { Region } from './region/models/region.model';
 
 @Module({
   imports: [
@@ -27,13 +31,15 @@ import { Bot } from './bot/model/bot.model';
       username: process.env.POSTGRES_USER,
       password: String(process.env.POSTGRES_PASSWORD),
       database: process.env.POSTGRES_DB,
-      models: [User, Bot],
+      models: [User, Bot, Otp, Region],
       autoLoadModels: true,
       logging: false,
     }),
     UsersModule,
     MailModule,
     BotModule,
+    OtpModule,
+    RegionModule,
   ],
   controllers: [],
   providers: [],

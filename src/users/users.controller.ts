@@ -18,10 +18,11 @@ import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { User } from './models/user.model';
 import { Response } from 'express';
 import { LoginUserDto } from './dto/login-user.dto';
-import { CookieGetter } from '../decorators/cookieGetter.decorators';
+import { CookieGetter } from '../decorators/cookieGetter.decorator';
 import { FindUserDto } from './dto/find-user.dto';
-import { Use } from 'nestjs-telegraf';
 import { UserGuard } from '../guards/user.guard';
+import { PhoneUserDto } from './dto/phone-user.dto';
+import { VerifyOtpDto } from './dto/verifyOtp.dto';
 
 @Controller('users')
 export class UsersController {
@@ -99,5 +100,15 @@ export class UsersController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.usersService.remove(+id);
+  }
+
+  @Post('/otp')
+  newOtp(@Body() phoneUserDto: PhoneUserDto) {
+    return this.usersService.newOTP(phoneUserDto);
+  }
+
+  @Post('/verify')
+  verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
+    return this.usersService.verifyOtp(verifyOtpDto);
   }
 }
