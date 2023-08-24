@@ -12,6 +12,7 @@ import { OtpModule } from './otp/otp.module';
 import { Otp } from './otp/model/otp.model';
 import { RegionModule } from './region/region.module';
 import { Region } from './region/models/region.model';
+import { StadiumTimesModule } from './stadium_times/stadium_times.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { Region } from './region/models/region.model';
     BotModule,
     OtpModule,
     RegionModule,
+    StadiumTimesModule,
   ],
   controllers: [],
   providers: [],
